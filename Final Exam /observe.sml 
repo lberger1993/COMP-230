@@ -1,0 +1,108 @@
+(* arith.sml *)
+
+(* A simple example of numeric expressions with variables, numbers, plus and
+ * times operators, and let-expressions for variable binding *)
+
+(* abstract syntax ********************************************************)
+(* the abstract syntax of arithmetic expressions *)
+
+type var = string
+
+datatype exp 
+  = Num of int              (* number constants *)
+  | Var of var              (* variables, with name given by the var argument *)
+  | Plus of exp * exp       (* addition: Plus(e1,e2) == e1 + e2 *)
+  | Times of exp * exp      (* multiplication: Times(e1,e2) == e1 * e2 *)
+  | Let of var * exp * exp  (* Let(x,e1,e2) == let x = e1 in e2 *)
+
+
+(* varsets ********************************************************)
+(* We want to compute sets of free variables, so we need to choose a 
+ * data structure to represent such sets. We will represent sets of variables
+ * as ordered lists of variables (i.e. strings). *)
+
+(* REPRESENTATION INVARIANT:
+ * a varset is a list of vars (strings) in ascending order, with
+ * no duplicates *)
+
+(* We introduce a type name for variable sets.  This is just an abbreviation
+ * for "var list", which in turn is equivalent to "string list" *)
+
+type varset = var list
+
+(* the empty varset is represented by the empty list.  This satisfies the
+ * representation invariant vacuously *)
+
+val empty : varset = nil
+
+(* insert : var * varset -> varset
+ * add an element to a varset.  If x is already in the varset the
+ * varset is returned unchanged. Note that insert does not change the
+ * varset *)
+fun insert (x: var, nil) = [x]
+  | insert (x, (s as (y::ys))) =  
+      if x < y then x :: s
+      else if y < x then y :: insert(x,ys)
+      else s
+
+(* ML Note: In the first rule, I explicitly constrain the type of the
+ * parameter variable x to be var.  This is done so that the "<" operation
+ * occuring later in the function, which is overloaded (i.e. defined at
+ * several different types) will be specialized to the right type, in this
+ * case string.  ML's automatic type inference will ensure that the second
+ * argument is given the type var list (equivalent to varset).
+ *   The second rule uses a "layered" pattern, "s as (y::ys)".  When this
+ * pattern matches a (non-empty) list, variable s will be bound to the whole
+ * list, while y and ys will be bound to the first element and the remainder,
+ * respectively.
+ *)
+
+(* create a singleton list from an element *)
+fun single (v: var) = insert(v, empty)
+
+(* compute the union of two lists.  Insert is used to make sure the
+ * representation invariant is maintaned, though this is not the most
+ * efficient way to implement this (can you think of a better way?). *)
+fun union (xs, nil) = xs
+  | union (nil, ys) = ys
+  | union (x::xs, ys) = insert (x, union(xs, ys))
+
+(* the difference of two sets (often written a\b).  diff(a,b) consists
+ * of all the elements of a that are not in b. *)
+fun diff (xs: varset, nil) = xs
+  | diff (nil, ys) = nil
+  | diff (xl as (x::xs), yl as (y::ys)) = 
+      if x < y then x :: diff (xs, yl)
+      else if y < x then diff (xl, ys)
+      else diff (xs, ys)
+
+
+(* free variables ********************************************************)
+
+(* now we use varsets to compute the free variables of an expression *)
+
+(* freeVars : exp -> varset
+ * the free variables of the exp *)
+
+fun freeVars (Num n) = empty
+  | freeVars (Var v) = single v
+  | freeVars (Plus(e1,e2)) = union (freeVars e1, freeVars e2)
+  | freeVars (Times(e1,e2)) = union (freeVars e1, freeVars e2)
+  | freeVars (Let(v,e1,e2)) = union (freeVars e1, (diff (freeVars e2, single v)))
+
+
+(* test cases:
+ *  try applying freeVars to these sample expressions *)
+
+val exp1 = Let("x",Num 3,Plus(Var "x", Num 1))
+
+val exp2 = Let("x",Var "y",Plus(Var "x", Num 1))
+
+val exp3 = Let("x",Num 3,Plus(Var "x", Var "y"))
+
+val exp4 = Let("x",Var "y",Plus(Var "x", Var "y"))
+
+val exp5 = Let("x",Plus(Var "x",Num 3),Plus(Var "x", Var "y"))
+
+val exp6 = Let("x",Plus(Var "y",Num 3),
+               Let("y",Plus(Var "x", Num 1),Times(Var "x", Var "y")))
